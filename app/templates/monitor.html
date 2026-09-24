@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Monitoreo de Experimento{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0">Monitoreo de Experimento</h4>
+</div>
+
+<div class="card stat-card mb-3">
+  <div class="card-body">
+    <div class="monitor-controls">
+      <div class="path-wrap">
+        <label class="form-label small text-muted mb-1" for="fPath">Nombre de la ejecución</label>
+        <input id="fPath" type="text" class="form-control form-control-sm" value="{{ data_path }}"
+               placeholder="Seleccioná o escribí el nombre (ej: Pio_emu)" list="runsList" autocomplete="off">
+        <datalist id="runsList"></datalist>
+      </div>
+      <div class="form-check form-switch py-2 pe-1 mb-0 flex-shrink-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="fEmulador" checked>
+        <label class="form-check-label" for="fEmulador">Emulador</label>
+      </div>
+      <div class="form-check form-switch py-2 pe-1 mb-0 flex-shrink-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="fAutoRefresh"{% if auto_refresh %} checked{% endif %}>
+        <label class="form-check-label" for="fAutoRefresh">Auto-refresh</label>
+      </div>
+      <div class="d-flex align-items-end gap-1 flex-shrink-0 pe-1">
+        <input id="fRefreshSecs" type="number" class="form-control form-control-sm" min="1" step="1"
+               value="{{ refresh_secs }}" style="width: 70px" title="Segundos entre refrescos">
+        <label class="form-label small text-muted mb-1" for="fRefreshSecs">s</label>
+      </div>
+      <button id="btnPlot" class="btn btn-primary btn-sm flex-shrink-0" onclick="plotear()" style="min-width: 110px">
+        <i class="bi bi-graph-up me-1"></i> Plotear
+      </button>
+    </div>
+    <div class="mt-3 small text-muted">
+      <span id="plotStatus"><i class="bi bi-info-circle me-1"></i>Indicá el nombre de la ejecución y pulsá Plotear.{% if base_dir %} La ruta se resuelve contra <code>{{ base_dir }}</code>.{% endif %}</span>
+    </div>
+  </div>
+</div>
+
+<div id="chartArea"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/chart.umd.min.js"></script>
+<script src="/static/js/hammer.min.js"></script>
+<script src="/static/js/chartjs-plugin-zoom.min.js"></script>
+<script>
+function showAlert(message, kind) {
+  const status = document.getElementById("plotStatus");
+  status.innerHTML = `<i class="bi bi-${kind === "danger" ? "exclamation" : kind === "success" ? "check" : "info"}-circle me-1"></i>${message}`;
+  status.className = `small text-${kind === "danger" ? "danger" : kind === "success" ? "success" : "muted"}`;
+}
+
+let autoRefreshTimer = null;
+let plotting = false;
+
+function scheduleAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  const on = document.getElementById("fAutoRefresh").checked;
+  const secs = parseInt(document.getElementById("fRefreshSecs").value, 10);
+  if (on && secs > 0) {
+    autoRefreshTimer = setInterval(() => plotear(true), secs * 1000);
+  }
+}
+
+async function plotear(auto = false) {
+  const path = document.getElementById("fPath").value.trim();
+  const emu = document.getElementById("fEmulador").checked;
+  if (!path) {
+    showAlert("Indicá el nombre de la ejecución (ej. Pio_emu).", "danger");
+    return;
+  }
+  if (plotting) return;
+  plotting = true;
+  const btn = document.getElementById("btnPlot");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Plotear';
+  try {
+    const res = await fetch("/api/plot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, emulador: emu }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      renderCharts([]);
+      showAlert(data.error, "danger");
+      return;
+    }
+    renderCharts(data.charts || [], !auto);
+    showAlert(
+      `<strong>${data.exp_name || "Ejecución"}</strong> · ${data.charts.length} unidades · tiempo ${data.time != null && !isNaN(data.time) ? Number(data.time).toFixed(3) : "-"} h`,
+      "success"
+    );
+    persistSettings();
+  } catch (e) {
+    console.error(e);
+    renderCharts([]);
+    showAlert("Error al consultar los datos.", "danger");
+  } finally {
+    plotting = false;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-graph-up me-1"></i> Plotear';
+    scheduleAutoRefresh();
+  }
+}
+
+const _lastSettings = {};
+function persistSettings() {
+  const payload = {
+    data_path: document.getElementById("fPath").value.trim(),
+    auto_refresh: document.getElementById("fAutoRefresh").checked,
+    refresh_secs: parseInt(document.getElementById("fRefreshSecs").value, 10) || 5,
+  };
+  if (JSON.stringify(payload) === JSON.stringify(_lastSettings)) return;
+  Object.assign(_lastSettings, payload);
+  fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
+function renderCharts(charts, animate = true) {
+  const area = document.getElementById("chartArea");
+  const seen = new Set();
+  charts.forEach(ch => {
+    const id = "dataChart-" + ch.id.replace(/[^A-Za-z0-9_]/g, "_");
+    seen.add(id);
+    const existing = window.__lmCharts[id];
+    if (existing) {
+      updateLineChart(id, ch.series, existing, window.__lmCards[id], animate);
+      return;
+    }
+    const card = document.createElement("div");
+    card.className = "card stat-card mb-3";
+    card.innerHTML = `
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clipboard2-pulse me-2"></i><strong>${ch.label}</strong></span>
+        <span class="small text-muted series-count">${ch.series.length} series</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-box"><canvas id="${id}"></canvas></div>
+      </div>`;
+    area.appendChild(card);
+    buildLineChart(id, ch.series, animate, card);
+  });
+  Object.keys(window.__lmCards).forEach(id => {
+    if (seen.has(id)) return;
+    const chart = window.__lmCharts[id];
+    if (chart) { chart.destroy(); delete window.__lmCharts[id]; }
+    const card = window.__lmCards[id];
+    if (card) card.remove();
+    delete window.__lmCards[id];
+  });
+}
+
+document.addEventListener("DOMContentLoaded", async function () {
+  try {
+    const res = await fetch("/api/settings");
+    const s = await res.json();
+    if (s.data_path) document.getElementById("fPath").value = s.data_path;
+  } catch (e) { /* sin configuración previa */ }
+  try {
+    const res = await fetch("/api/runs");
+    const data = await res.json();
+    const list = document.getElementById("runsList");
+    (data.runs || []).forEach(run => {
+      const opt = document.createElement("option");
+      opt.value = run;
+      list.appendChild(opt);
+    });
+  } catch (e) { /* sin directorio base */ }
+  document.getElementById("fAutoRefresh").addEventListener("change", () => {
+    persistSettings();
+    scheduleAutoRefresh();
+  });
+  document.getElementById("fRefreshSecs").addEventListener("input", () => {
+    persistSettings();
+    scheduleAutoRefresh();
+  });
+  scheduleAutoRefresh();
+});
+</script>
+{% endblock %}

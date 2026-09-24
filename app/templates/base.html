@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/css/custom.css?v=2">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="d-flex" id="wrapper">
+  <main class="content">
+    <div class="mobile-topbar">
+      <span class="fw-bold"><i class="bi bi-graph-up-arrow text-primary"></i> Monitoreo de Experimento</span>
+    </div>
+    {% set msg = request.query_params.get('msg') %}
+    {% set err = request.query_params.get('error') %}
+    {% if msg %}<div class="alert alert-success alert-dismissible fade show" role="alert">{{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}
+    {% if err %}<div class="alert alert-danger alert-dismissible fade show" role="alert">{{ err }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script>window.LM_TZ = "{{ tz_name }}";</script>
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/app.js?v=2"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".content .alert").forEach(function (el) {
+    setTimeout(function () { el.classList.add("d-none"); }, 10000);
+  });
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
