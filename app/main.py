@@ -70,9 +70,15 @@ def api_runs():
     return {"runs": runs}
 
 
+def _settings_public() -> dict:
+    s = settings_store.settings()
+    s["data_path"] = config.display_data_path(s.get("data_path") or "")
+    return s
+
+
 @app.get("/api/settings")
 def api_settings():
-    return settings_store.settings()
+    return _settings_public()
 
 
 @app.post("/api/settings")
@@ -89,7 +95,7 @@ async def api_settings_save(request: Request):
         except (TypeError, ValueError):
             secs = max(1, config.REFRESH_MS_DEFAULT // 1000)
         settings_store.set(refresh_ms=secs * 1000)
-    return settings_store.settings()
+    return _settings_public()
 
 
 @app.get("/")

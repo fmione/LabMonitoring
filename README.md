@@ -42,8 +42,10 @@ La web queda en <http://localhost:8100>.
 
 `EXPMON_DATA_DIR_HOST` define el directorio **base** del host donde viven las
 ejecuciones (vive fuera de este proyecto). Se monta en `/data` dentro del
-contenedor; la app guarda el último nombre usado en
-`/data/.expmon-settings.json` (sobrevive a rebuilds y queda junto a los datos).
+contenedor y se **solo se lee**: la app nunca escribe ahí. El último nombre
+usado (y preferencias de refresco) se guarda dentro del proyecto en
+`app/settings.json` (ignorado por git). Con el override de desarrollo persiste
+en el host, ya que `./app` queda montado.
 
 En Docker no escribís `/data` en la web: ingresás el nombre de la ejecución
 (relativo a la base), como `Pio_emu`.

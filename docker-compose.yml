@@ -5,7 +5,6 @@ services:
     restart: unless-stopped
     environment:
       EXPMON_DATA_DIR: /data
-      EXPMON_SETTINGS_FILE: /data/.expmon-settings.json
       EXPMON_REFRESH_MS: ${EXPMON_REFRESH_MS:-5000}
       EXPMON_TZ: ${EXPMON_TZ:-Etc/GMT+3}
     volumes:
