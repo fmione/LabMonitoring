@@ -54,6 +54,7 @@ function showAlert(message, kind) {
 
 let autoRefreshTimer = null;
 let plotting = false;
+let manualInFlight = false;
 
 function scheduleAutoRefresh() {
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
@@ -68,14 +69,18 @@ async function plotear(auto = false) {
   const path = document.getElementById("fPath").value.trim();
   const emu = document.getElementById("fEmulador").checked;
   if (!path) {
+    if (auto) return;
     showAlert("Indicá el nombre de la ejecución (ej. Pio_emu).", "danger");
     return;
   }
   if (plotting) return;
   plotting = true;
   const btn = document.getElementById("btnPlot");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Plotear';
+  if (!auto) {
+    manualInFlight = true;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Plotear';
+  }
   try {
     const res = await fetch("/api/plot", {
       method: "POST",
@@ -84,24 +89,30 @@ async function plotear(auto = false) {
     });
     const data = await res.json();
     if (data.error) {
+      if (auto) { console.warn("[auto-refresh] descartado:", data.error); return; }
       renderCharts([]);
       showAlert(data.error, "danger");
       return;
     }
-    renderCharts(data.charts || [], !auto);
+    const charts = data.charts || [];
+    renderCharts(charts, !auto);
     showAlert(
-      `<strong>${data.exp_name || "Ejecución"}</strong> · ${data.charts.length} unidades · tiempo ${data.time != null && !isNaN(data.time) ? Number(data.time).toFixed(3) : "-"} h`,
+      `<strong>${data.exp_name || "Ejecución"}</strong> · ${charts.length} unidades · tiempo ${data.time != null && !isNaN(data.time) ? Number(data.time).toFixed(3) : "-"} h`,
       "success"
     );
     persistSettings();
   } catch (e) {
     console.error(e);
+    if (auto) { console.warn("[auto-refresh] descartado:", e); return; }
     renderCharts([]);
     showAlert("Error al consultar los datos.", "danger");
   } finally {
     plotting = false;
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-graph-up me-1"></i> Plotear';
+    if (manualInFlight) {
+      manualInFlight = false;
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-graph-up me-1"></i> Plotear';
+    }
     scheduleAutoRefresh();
   }
 }
