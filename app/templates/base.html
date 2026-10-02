@@ -12,9 +12,6 @@
 <body>
 <div class="d-flex" id="wrapper">
   <main class="content">
-    <div class="mobile-topbar">
-      <span class="fw-bold"><i class="bi bi-graph-up-arrow text-primary"></i> Monitoreo de Experimento</span>
-    </div>
     {% set msg = request.query_params.get('msg') %}
     {% set err = request.query_params.get('error') %}
     {% if msg %}<div class="alert alert-success alert-dismissible fade show" role="alert">{{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>{% endif %}

@@ -55,7 +55,7 @@ function ensureFixedTooltip() {
 }
 
 function tooltipExternal(context) {
-  const { chart, tooltip } = context;
+  const { chart, tooltip, event } = context;
   if (!chart || !chart.canvas || !chart.canvas.parentNode) return;
   const box = chart.canvas.parentNode;
   let el = box.querySelector(".lm-tooltip");
@@ -80,6 +80,22 @@ function tooltipExternal(context) {
     body.appendChild(row);
   });
   el.style.display = "block";
+  // Position near cursor (clamp to container)
+  const mx = (event && event.offsetX !== undefined) ? event.offsetX : (tooltip.caretX || 0);
+  const my = (event && event.offsetY !== undefined) ? event.offsetY : (tooltip.caretY || 0);
+  const offset = 8;
+  // Ensure layout known
+  const w = el.offsetWidth || 200;
+  const h = el.offsetHeight || 80;
+  let left = mx + offset;
+  let top  = my + offset;
+  if (left + w > box.clientWidth) left = mx - offset - w;
+  if (top + h > box.clientHeight)  top  = my - offset - h;
+  if (left < 0) left = offset;
+  if (top  < 0) top  = offset;
+  el.style.right = "auto";
+  el.style.left  = left + "px";
+  el.style.top   = top  + "px";
 }
 
 function buildLineChart(canvasId, series, animate = true, card = null) {
@@ -105,7 +121,7 @@ function buildLineChart(canvasId, series, animate = true, card = null) {
       responsive: true,
       maintainAspectRatio: false,
       animation: animate,
-      interaction: { mode: "index", intersect: false },
+      interaction: { mode: "nearest", intersect: false },
       scales: {
         x: {
           type: "linear",
@@ -127,6 +143,11 @@ function buildLineChart(canvasId, series, animate = true, card = null) {
           external: tooltipExternal,
           callbacks: {
             title: items => items.length ? `t = ${Number(items[0].parsed.x).toFixed(3)}` : "",
+          },
+          animation: false,
+          animations: {
+            opacity: { duration: 0 },
+            numbers: { duration: 0 }
           },
         },
         zoom: {
